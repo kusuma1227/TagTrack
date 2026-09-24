@@ -35,15 +35,40 @@ const generateUniqueTagId = async (maxRetries = 10) => {
 };
 
 /**
+ * Resolves the client base URL for public scan links.
+ * - In production, uses the deployed Vercel frontend URL (from CLIENT_URL or fallback https://tag-track-chi.vercel.app).
+ * - In development, uses the local dev server URL (e.g. http://localhost:5173).
+ */
+const getClientBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    if (process.env.CLIENT_URL) {
+      const urls = process.env.CLIENT_URL.split(',')
+        .map((url) => url.trim().replace(/\/$/, ''))
+        .filter(Boolean);
+      const prodUrl = urls.find((url) => !url.includes('localhost') && !url.includes('127.0.0.1'));
+      if (prodUrl) return prodUrl;
+    }
+    return 'https://tag-track-chi.vercel.app';
+  }
+
+  // Development environment
+  if (process.env.CLIENT_URL) {
+    const urls = process.env.CLIENT_URL.split(',')
+      .map((url) => url.trim().replace(/\/$/, ''))
+      .filter(Boolean);
+    return urls[0] || 'http://localhost:5173';
+  }
+
+  return 'http://localhost:5173';
+};
+
+/**
  * Generate a QR Code as a Data URL (base64 PNG) containing the item lookup URL
  * @param {string} tagId - The Tag ID (e.g. TT-A3F2K9)
  * @returns {Promise<string>} Base64 Data URL (data:image/png;base64,...)
  */
 const generateQRCodeDataUrl = async (tagId) => {
-  const clientBaseUrl = process.env.CLIENT_URL
-    ? process.env.CLIENT_URL.split(',')[0].trim().replace(/\/$/, '')
-    : 'http://localhost:5173';
-
+  const clientBaseUrl = getClientBaseUrl();
   const lookupUrl = `${clientBaseUrl}/scan/${tagId}`;
 
   const qrDataUrl = await QRCode.toDataURL(lookupUrl, {
@@ -63,4 +88,5 @@ const generateQRCodeDataUrl = async (tagId) => {
 module.exports = {
   generateUniqueTagId,
   generateQRCodeDataUrl,
+  getClientBaseUrl,
 };

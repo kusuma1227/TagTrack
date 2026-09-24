@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
 /**
  * ScanPage — Public page for searching a lost item by Tag ID.
@@ -7,9 +7,16 @@ import { useNavigate } from 'react-router-dom';
  * Phase 9: QR camera scan will be added here.
  */
 const ScanPage = () => {
-  const [tagId, setTagId] = useState('');
+  const { tagId: urlTagId } = useParams();
+  const [tagId, setTagId] = useState(urlTagId ? urlTagId.toUpperCase() : '');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (urlTagId) {
+      setTagId(urlTagId.toUpperCase());
+    }
+  }, [urlTagId]);
 
   const handleSearch = (e) => {
     e.preventDefault();
