@@ -14,6 +14,7 @@ import ScanPage from './pages/public/ScanPage';
 
 // Owner Pages
 import OwnerDashboard from './pages/owner/OwnerDashboard';
+import RegisterItemPage from './pages/owner/RegisterItemPage';
 
 // Officer Pages
 import OfficerDashboard from './pages/officer/OfficerDashboard';
@@ -96,6 +97,30 @@ const App = () => {
             <AppLayout>
               <RoleRoute allowedRoles={['owner', 'finder']}>
                 <OwnerDashboard />
+              </RoleRoute>
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/items"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <RoleRoute allowedRoles={['owner', 'finder']}>
+                <OwnerDashboard />
+              </RoleRoute>
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/items/register"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <RoleRoute allowedRoles={['owner', 'admin']}>
+                <RegisterItemPage />
               </RoleRoute>
             </AppLayout>
           </ProtectedRoute>

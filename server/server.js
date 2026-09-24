@@ -10,6 +10,7 @@ const errorHandler = require('./src/middleware/errorHandler');
 
 // Route imports
 const authRoutes = require('./src/routes/authRoutes');
+const itemRoutes = require('./src/routes/itemRoutes');
 
 // Connect to database
 connectDB();
@@ -116,6 +117,7 @@ app.get('/api/health', (req, res) => {
 // ── Routes ────────────────────────────────────────────────────────────────────
 // Apply strict auth rate limiter only to auth routes
 app.use('/api/v1/auth', authLimiter, authRoutes);
+app.use('/api/v1/items', itemRoutes);
 
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
