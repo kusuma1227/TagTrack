@@ -16,16 +16,62 @@ connectDB();
 
 const app = express();
 
-// ── Security Middleware ──────────────────────────────────────────────────────
-app.use(helmet());
+// Trust reverse proxy (e.g. Render, Vercel) for accurate client IP in rate limiting
+app.set('trust proxy', 1);
 
-// CORS: allow only the frontend origin
+// ── Security Middleware ──────────────────────────────────────────────────────
 app.use(
-  cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    credentials: true,
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
+
+// ── CORS Configuration ───────────────────────────────────────────────────────
+const defaultAllowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+  'http://127.0.0.1:3000',
+  'https://tag-track-chi.vercel.app',
+];
+
+const getEnvOrigins = () => {
+  if (!process.env.CLIENT_URL) return [];
+  return process.env.CLIENT_URL.split(',')
+    .map((url) => url.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+};
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser requests (e.g. server-to-server, curl, Postman, health checks)
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = [...defaultAllowedOrigins, ...getEnvOrigins()];
+    const normalizedOrigin = origin.replace(/\/$/, '');
+
+    // Allow configured origins or any Vercel app domain
+    if (
+      allowedOrigins.includes(normalizedOrigin) ||
+      /^https:\/\/tag-track[a-zA-Z0-9-]*\.vercel\.app$/.test(normalizedOrigin) ||
+      process.env.NODE_ENV !== 'production'
+    ) {
+      return callback(null, true);
+    }
+
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Set-Cookie'],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Global rate limiter (100 requests per 15 minutes per IP)
 const globalLimiter = rateLimit({
@@ -33,16 +79,18 @@ const globalLimiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
   message: { success: false, message: 'Too many requests, please try again later.' },
 });
 app.use(globalLimiter);
 
-// Strict auth rate limiter (10 requests per 15 minutes per IP)
+// Strict auth rate limiter (20 requests per 15 minutes per IP)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
   message: { success: false, message: 'Too many login attempts, please try again later.' },
 });
 
