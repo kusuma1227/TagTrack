@@ -47,7 +47,7 @@ const QRModal = ({ item, isOpen, onClose }) => {
             }
             .tag-card {
               width: 320px;
-              border: 2px dashed #4f46e5;
+              border: 2px dashed #8B5CF6;
               border-radius: 16px;
               padding: 24px;
               text-align: center;
@@ -57,19 +57,19 @@ const QRModal = ({ item, isOpen, onClose }) => {
             .tag-header {
               font-size: 14px;
               font-weight: 700;
-              color: #4f46e5;
+              color: #8B5CF6;
               letter-spacing: 1px;
               margin-bottom: 8px;
             }
             .item-title {
               font-size: 18px;
               font-weight: 800;
-              color: #111827;
+              color: #18151F;
               margin: 4px 0;
             }
             .category {
               font-size: 12px;
-              color: #6b7280;
+              color: #5B5568;
               margin-bottom: 16px;
             }
             .qr-image {
@@ -84,18 +84,18 @@ const QRModal = ({ item, isOpen, onClose }) => {
               font-size: 22px;
               font-weight: 800;
               letter-spacing: 2px;
-              color: #1e1b4b;
+              color: #8B5CF6;
               margin: 14px 0 6px 0;
             }
             .instructions {
               font-size: 11px;
-              color: #4b5563;
+              color: #5B5568;
               line-height: 1.4;
             }
             .footer {
               margin-top: 14px;
               font-size: 10px;
-              color: #9ca3af;
+              color: #777080;
             }
             @media print {
               body { background: transparent; }
@@ -127,12 +127,19 @@ const QRModal = ({ item, isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-      <div className="card w-full max-w-md p-6 bg-white relative animate-in fade-in zoom-in duration-150">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md p-6 sm:p-8 rounded-[28px] bg-white border border-[#E9DFFF] shadow-soft-xl relative animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100"
+          className="absolute top-5 right-5 text-[#777080] hover:text-[#18151F] p-2 rounded-xl bg-[#F8F7FF] hover:bg-[#F3EEFF] transition-all duration-200 active:scale-90"
           aria-label="Close"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -141,36 +148,38 @@ const QRModal = ({ item, isOpen, onClose }) => {
         </button>
 
         <div className="text-center">
-          <div className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-semibold mb-3">
+
+          {/* Badge */}
+          <div className="inline-flex items-center gap-1.5 bg-[#EEE7FF] text-[#8B5CF6] border border-[#DDD3F5] px-3 py-1 rounded-full text-xs font-bold mb-3">
             <span>🏷️</span>
-            <span>Tag & QR Code</span>
+            <span>Digital Tag & QR Code</span>
           </div>
 
-          <h3 className="text-xl font-bold text-gray-900 mb-1">{item.itemName}</h3>
-          <p className="text-xs text-gray-500 mb-4">{item.category}</p>
+          <h3 className="text-xl sm:text-2xl font-extrabold text-[#18151F] mb-1">{item.itemName}</h3>
+          <p className="text-xs text-[#5B5568] mb-5 font-medium">{item.category}</p>
 
           {/* QR Code Frame */}
-          <div className="p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100 inline-block mb-4">
+          <div className="p-4 bg-[#F8F7FF] rounded-2xl shadow-soft-sm border border-[#DDD3F5] inline-block mb-5 transition-transform duration-300 hover:scale-105">
             <img
               src={item.qrCode}
               alt={`QR Code for ${item.tagId}`}
-              className="w-56 h-56 mx-auto rounded-xl bg-white shadow-sm"
+              className="w-56 h-56 mx-auto rounded-xl bg-white p-1"
             />
           </div>
 
           {/* Tag ID Display with Copy */}
-          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 mb-4 flex items-center justify-between">
+          <div className="bg-[#F8F7FF] rounded-xl p-3.5 border border-[#DDD3F5] mb-4 flex items-center justify-between">
             <div className="text-left">
-              <span className="text-[11px] font-medium text-gray-400 block uppercase tracking-wider">
+              <span className="text-[10px] font-bold text-[#777080] block uppercase tracking-wider">
                 Unique Tag ID
               </span>
-              <span className="font-mono text-lg font-bold text-indigo-900 tracking-wider">
+              <span className="font-mono text-lg font-extrabold text-[#8B5CF6] tracking-wider">
                 {item.tagId}
               </span>
             </div>
             <button
               onClick={handleCopyTagId}
-              className="btn-secondary text-xs py-1.5 px-3"
+              className="btn-secondary text-xs py-1.5 px-3.5"
               title="Copy Tag ID"
             >
               📋 Copy
@@ -178,19 +187,19 @@ const QRModal = ({ item, isOpen, onClose }) => {
           </div>
 
           {item.description && (
-            <p className="text-xs text-gray-500 mb-5 bg-gray-50/70 p-2.5 rounded-lg border border-gray-100 text-left">
-              <span className="font-medium text-gray-700 block mb-0.5">Description:</span>
+            <p className="text-xs text-[#5B5568] mb-5 bg-[#F8F7FF] p-3 rounded-xl border border-[#DDD3F5] text-left leading-relaxed font-normal">
+              <span className="font-bold text-[#18151F] block mb-0.5">Description:</span>
               {item.description}
             </p>
           )}
 
           {/* Actions */}
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={handleDownload} className="btn-secondary text-sm py-2.5">
+            <button onClick={handleDownload} className="btn-secondary text-xs py-3">
               📥 Download PNG
             </button>
-            <button onClick={handlePrint} className="btn-primary text-sm py-2.5">
-              🖨️ Print Tag
+            <button onClick={handlePrint} className="btn-primary text-xs py-3">
+              🖨️ Print Recovery Tag
             </button>
           </div>
         </div>

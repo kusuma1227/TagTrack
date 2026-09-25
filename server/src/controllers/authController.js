@@ -4,19 +4,25 @@ const ApiError = require('../utils/ApiError');
 /**
  * Auth Controller
  * ───────────────
- * register      POST /api/v1/auth/register
- * login         POST /api/v1/auth/login
- * getMe         GET  /api/v1/auth/me
- * updateProfile PUT  /api/v1/auth/me
- * changePassword PUT /api/v1/auth/me/password
+ * register       POST /api/v1/auth/register
+ * login          POST /api/v1/auth/login
+ * getMe          GET  /api/v1/auth/me
+ * updateProfile  PUT  /api/v1/auth/me
+ * changePassword PUT  /api/v1/auth/me/password
  */
 
 // ── Register ─────────────────────────────────────────────────────────────────
 const register = async (req, res, next) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, role } = req.body;
+    const email = (req.body.email || '').trim().toLowerCase();
+    const password = req.body.password;
 
-    // Check for existing user
+    if (!name || !email || !password) {
+      throw new ApiError(400, 'Name, email, and password are required', 'MISSING_FIELDS');
+    }
+
+    // Check for existing user with case-insensitive lowercase query
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       throw new ApiError(409, 'An account with this email already exists', 'EMAIL_IN_USE');
@@ -24,7 +30,7 @@ const register = async (req, res, next) => {
 
     // Create user — password is set on passwordHash field, hashed by pre-save hook
     const user = await User.create({
-      name,
+      name: name.trim(),
       email,
       passwordHash: password,
       role: role || 'owner',
@@ -49,13 +55,17 @@ const register = async (req, res, next) => {
 // ── Login ─────────────────────────────────────────────────────────────────────
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const email = (req.body.email || '').trim().toLowerCase();
+    const password = req.body.password;
+
+    if (!email || !password) {
+      throw new ApiError(400, 'Email and password are required', 'MISSING_FIELDS');
+    }
 
     // Fetch user WITH passwordHash (select: false by default on schema)
     const user = await User.findOne({ email }).select('+passwordHash');
 
     if (!user) {
-      // Generic message: don't reveal whether email exists
       throw new ApiError(401, 'Invalid email or password', 'INVALID_CREDENTIALS');
     }
 

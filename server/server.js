@@ -74,10 +74,10 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
-// Global rate limiter (100 requests per 15 minutes per IP)
+// Global rate limiter
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000,
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => req.method === 'OPTIONS',
@@ -85,14 +85,14 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
-// Strict auth rate limiter (20 requests per 15 minutes per IP)
+// Auth rate limiter
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: process.env.NODE_ENV === 'production' ? 30 : 500,
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => req.method === 'OPTIONS',
-  message: { success: false, message: 'Too many login attempts, please try again later.' },
+  message: { success: false, message: 'Too many authentication attempts, please try again later.' },
 });
 
 // ── Body Parsing ─────────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-// Apply strict auth rate limiter only to auth routes
+// Apply auth rate limiter to auth routes
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/items', itemRoutes);
 

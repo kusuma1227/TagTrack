@@ -1,17 +1,10 @@
 import axios from 'axios';
 
 /**
- * Axios instance pre-configured for the TagTrack API.
- *
- * - baseURL: /api/v1 (proxied to http://localhost:5000 in dev via Vite config)
- * - Request interceptor: automatically attaches JWT from localStorage
- * - Response interceptor: on 401, clears token and redirects to /login
- */
-/**
  * Resolve the API base URL based on environment variables and deployment context.
  * - If VITE_API_URL is provided, use it (handles trailing slashes / subpaths).
- * - In production (e.g. Vercel), default to the Render backend.
- * - In development, default to relative '/api/v1' to utilize Vite's dev proxy.
+ * - If running locally (localhost / 127.0.0.1), always use relative '/api/v1' to route to the local backend.
+ * - In cloud production (e.g. Vercel), default to the cloud backend.
  */
 const getBaseURL = () => {
   const envApiUrl = import.meta.env.VITE_API_URL;
@@ -19,9 +12,20 @@ const getBaseURL = () => {
     const clean = envApiUrl.replace(/\/$/, '');
     return clean.endsWith('/api/v1') ? clean : `${clean}/api/v1`;
   }
+
+  // If running in a browser on localhost, always talk to the local backend
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return '/api/v1';
+    }
+  }
+
+  // Cloud production default (e.g. deployed on Vercel)
   if (import.meta.env.PROD) {
     return 'https://tagtrack-5a55.onrender.com/api/v1';
   }
+
   return '/api/v1';
 };
 
@@ -30,7 +34,7 @@ const axiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true,
+  timeout: 15000,
 });
 
 // ── Request Interceptor ───────────────────────────────────────────────────────
