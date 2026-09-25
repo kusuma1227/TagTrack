@@ -290,6 +290,42 @@ const markItemLost = async (req, res, next) => {
   }
 };
 
+// ── Get Found Reports for Logged-in Owner ────────────────────────────────────
+const getMyFoundReports = async (req, res, next) => {
+  try {
+    // 1. Fetch all items owned by the authenticated user
+    const ownerItems = await Item.find({ owner: req.user._id }).select('_id');
+    const ownerItemIds = ownerItems.map((item) => item._id);
+
+    if (ownerItemIds.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Found reports retrieved successfully',
+        data: {
+          reports: [],
+          count: 0,
+        },
+      });
+    }
+
+    // 2. Fetch all found reports for these items with item details populated
+    const reports = await FoundReport.find({ item: { $in: ownerItemIds } })
+      .populate('item', 'itemName tagId status category description')
+      .sort({ createdAt: -1 });
+
+    return res.json({
+      success: true,
+      message: 'Found reports retrieved successfully',
+      data: {
+        reports,
+        count: reports.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getItemByTagId,
   reportItemFound,
@@ -297,4 +333,5 @@ module.exports = {
   getMyItems,
   getItemById,
   markItemLost,
+  getMyFoundReports,
 };

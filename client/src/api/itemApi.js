@@ -39,3 +39,9 @@ export const reportItemFound = async (tagId, reportData) => {
   const response = await axiosInstance.post(`/items/${tagId}/found`, reportData);
   return response.data;
 };
+
+// Get all found reports for items owned by authenticated owner (JWT required)
+export const getMyFoundReports = async () => {
+  const response = await axiosInstance.get('/items/found-reports');
+  return response.data;
+};

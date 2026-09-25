@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import useAuth from '../../hooks/useAuth';
-import { getMyItems, markItemLost } from '../../api/itemApi';
+import { getMyItems, markItemLost, getMyFoundReports } from '../../api/itemApi';
 import { ITEM_CATEGORIES } from '../../config/constants';
 import QRModal from '../../components/items/QRModal';
 
@@ -14,6 +14,7 @@ import QRModal from '../../components/items/QRModal';
  * - Clean white item cards with subtle lavender borders
  * - Real-time search & Category filters
  * - QR preview triggers & copyable Tag IDs
+ * - Found Reports recovery leads viewer
  */
 const OwnerDashboard = () => {
   const { user } = useAuth();
@@ -26,6 +27,11 @@ const OwnerDashboard = () => {
   const [itemToMarkLost, setItemToMarkLost] = useState(null);
   const [isMarkingLost, setIsMarkingLost] = useState(false);
 
+  // Found Reports state
+  const [foundReports, setFoundReports] = useState([]);
+  const [isLoadingReports, setIsLoadingReports] = useState(true);
+  const [reportsError, setReportsError] = useState('');
+
   const fetchItems = async () => {
     try {
       setIsLoading(true);
@@ -35,6 +41,19 @@ const OwnerDashboard = () => {
       toast.error('Failed to load registered items');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchFoundReports = async () => {
+    try {
+      setIsLoadingReports(true);
+      setReportsError('');
+      const res = await getMyFoundReports();
+      setFoundReports(res.data?.reports || []);
+    } catch (error) {
+      setReportsError('Failed to load found reports');
+    } finally {
+      setIsLoadingReports(false);
     }
   };
 
@@ -69,6 +88,7 @@ const OwnerDashboard = () => {
 
   useEffect(() => {
     fetchItems();
+    fetchFoundReports();
   }, []);
 
   // Filter items client-side for smooth real-time searching
@@ -174,13 +194,13 @@ const OwnerDashboard = () => {
               icon: '⚠️',
             },
             {
-              label: 'Items Found',
-              value: foundCount,
+              label: 'Found Reports',
+              value: foundReports.length,
               color: 'text-[#F97316]',
               bg: 'bg-[#FFF4E8]',
               border: 'border-[#FED7AA]',
               glow: 'hover:border-[#F97316]/50',
-              icon: '🔍',
+              icon: '📢',
             },
             {
               label: 'Safely Returned',
@@ -207,6 +227,195 @@ const OwnerDashboard = () => {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* ── Found Reports Section ────────────────────────────────────────── */}
+        <div className="space-y-6 animate-slide-up" style={{ animationDelay: '150ms' }}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl sm:text-2xl font-bold text-[#18151F] flex items-center gap-2">
+                <span>📢</span>
+                <span>Found Reports</span>
+              </h2>
+              <span className="text-xs font-mono font-bold bg-[#FFF0F7] text-[#EC4899] border border-[#FBCFE8] px-2.5 py-0.5 rounded-full">
+                {isLoadingReports ? '...' : foundReports.length}
+              </span>
+              {foundReports.length > 0 && (
+                <span className="text-[11px] font-bold bg-[#ECFDF5] text-[#10B981] border border-[#A7F3D0] px-2.5 py-0.5 rounded-full hidden sm:inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
+                  Recovery Leads Available
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={fetchFoundReports}
+              disabled={isLoadingReports}
+              className="btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 self-start sm:self-auto"
+              title="Refresh Found Reports"
+            >
+              <span className={isLoadingReports ? 'animate-spin inline-block' : ''}>🔄</span>
+              <span>{isLoadingReports ? 'Refreshing...' : 'Refresh Reports'}</span>
+            </button>
+          </div>
+
+          {isLoadingReports ? (
+            /* Loading State */
+            <div className="rounded-[24px] p-12 bg-white border border-[#E9DFFF] text-center shadow-soft-sm">
+              <div className="w-8 h-8 border-3 border-[#8B5CF6] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-xs text-[#5B5568] font-medium">Checking for finder reports...</p>
+            </div>
+          ) : reportsError ? (
+            /* Error State */
+            <div className="rounded-[24px] p-8 bg-white border border-[#FBCFE8] text-center shadow-soft-sm">
+              <div className="text-3xl mb-2">⚠️</div>
+              <h3 className="text-sm font-bold text-[#18151F] mb-1">Failed to Load Reports</h3>
+              <p className="text-xs text-[#5B5568] mb-4">{reportsError}</p>
+              <button
+                onClick={fetchFoundReports}
+                className="btn-secondary text-xs py-2 px-4"
+              >
+                Try Again
+              </button>
+            </div>
+          ) : foundReports.length === 0 ? (
+            /* Empty State */
+            <div className="rounded-[24px] p-10 bg-white border border-[#E9DFFF] text-center shadow-soft-sm">
+              <div className="text-4xl mb-3">📬</div>
+              <h3 className="text-base font-bold text-[#18151F] mb-1">No Found Reports Yet</h3>
+              <p className="text-xs text-[#5B5568] max-w-md mx-auto leading-relaxed font-normal">
+                When someone scans the QR code or Tag ID of one of your LOST items and submits a report, the finder's contact details and location will appear here immediately.
+              </p>
+            </div>
+          ) : (
+            /* Reports Grid */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {foundReports.map((report, idx) => (
+                <div
+                  key={report._id}
+                  className="rounded-[22px] p-6 bg-white border border-[#E9DFFF] hover:border-[#8B5CF6]/50 shadow-soft-sm hover:shadow-soft-md transition-all duration-300 flex flex-col justify-between hover:-translate-y-1 animate-slide-up relative overflow-hidden"
+                  style={{ animationDelay: `${Math.min((idx + 1) * 60, 400)}ms` }}
+                >
+                  {/* Subtle Top Accent Line */}
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F97316]" />
+
+                  <div className="space-y-4">
+                    {/* Header: Item Name, Category & Visual LOST Indicator */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[11px] font-bold bg-[#FFF0F7] text-[#EC4899] border border-[#FBCFE8] px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                            <span>⚠️</span>
+                            <span>LOST Item</span>
+                          </span>
+                          {report.item?.category && (
+                            <span className="text-[11px] font-bold bg-[#F8F7FF] text-[#8B5CF6] border border-[#DDD3F5] px-2 py-0.5 rounded-full">
+                              {report.item.category}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-extrabold text-[#18151F] text-lg">
+                          {report.item?.itemName || 'Item'}
+                        </h3>
+                      </div>
+
+                      {/* Report Status Badge */}
+                      <div className="text-right">
+                        <span className="badge bg-[#ECFDF5] text-[#10B981] border-[#A7F3D0] uppercase font-bold text-[10px]">
+                          {report.status || 'SUBMITTED'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Tag ID Display */}
+                    <div className="p-3 bg-[#F8F7FF] rounded-xl border border-[#DDD3F5] flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-[#777080] block tracking-wider">
+                          Target Tag ID
+                        </span>
+                        <span className="font-mono text-sm font-extrabold text-[#8B5CF6] tracking-wider">
+                          {report.item?.tagId || 'N/A'}
+                        </span>
+                      </div>
+                      {report.item?.tagId && (
+                        <button
+                          onClick={(e) => handleCopyTagId(report.item.tagId, e)}
+                          className="btn-secondary text-[11px] py-1 px-2.5"
+                          title="Copy Tag ID"
+                        >
+                          📋 Copy Tag
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Finder Contact Information Box */}
+                    <div className="p-4 bg-[#FFF8FA] rounded-xl border border-[#FCE7F3] space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-[#FBCFE8] pb-2">
+                        <span className="text-xs font-bold text-[#9D174D] flex items-center gap-1.5">
+                          <span>👤</span>
+                          <span>Finder Details</span>
+                        </span>
+                        <span className="text-xs font-bold text-[#18151F]">
+                          {report.finderName}
+                        </span>
+                      </div>
+
+                      {/* Phone */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[#777080] font-medium flex items-center gap-1">
+                          <span>📞</span> Phone:
+                        </span>
+                        <a
+                          href={`tel:${report.finderPhone}`}
+                          className="font-bold text-[#8B5CF6] hover:underline font-mono"
+                        >
+                          {report.finderPhone}
+                        </a>
+                      </div>
+
+                      {/* Email (if available) */}
+                      {report.finderEmail && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-[#777080] font-medium flex items-center gap-1">
+                            <span>✉️</span> Email:
+                          </span>
+                          <a
+                            href={`mailto:${report.finderEmail}`}
+                            className="font-bold text-[#8B5CF6] hover:underline truncate max-w-[200px]"
+                          >
+                            {report.finderEmail}
+                          </a>
+                        </div>
+                      )}
+
+                      {/* Message / Location */}
+                      {report.finderMessage && (
+                        <div className="pt-2 border-t border-[#FBCFE8] text-xs">
+                          <span className="text-[#777080] font-medium block mb-1">
+                            💬 Finder Message / Location:
+                          </span>
+                          <p className="bg-white p-2.5 rounded-lg border border-[#FBCFE8] text-[#18151F] leading-relaxed italic font-normal">
+                            "{report.finderMessage}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer: Date Submitted */}
+                  <div className="pt-3 mt-4 border-t border-[#E9DFFF] flex items-center justify-between text-[11px] text-[#777080]">
+                    <span className="flex items-center gap-1">
+                      <span>🕒</span>
+                      <span>Reported {format(new Date(report.createdAt), 'MMM d, yyyy h:mm a')}</span>
+                    </span>
+                    <span className="font-semibold text-[#8B5CF6]">
+                      Verified Lead
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── My Items Section ────────────────────────────────────────────── */}

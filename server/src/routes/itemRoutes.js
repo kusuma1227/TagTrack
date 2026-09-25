@@ -13,6 +13,7 @@ const {
   markItemLost,
   getItemByTagId,
   reportItemFound,
+  getMyFoundReports,
 } = require('../controllers/itemController');
 
 // ── Public Routes (No authentication required) ──────────────────────────────
@@ -61,6 +62,15 @@ router.patch(
   '/:id/lost',
   authorize(ROLES.OWNER),
   markItemLost
+);
+
+// @route   GET /api/v1/items/found-reports
+// @desc    Get all found reports submitted for items owned by the authenticated owner
+// @access  Private (Owner, Admin)
+router.get(
+  '/found-reports',
+  authorize(ROLES.OWNER, ROLES.ADMIN),
+  getMyFoundReports
 );
 
 // @route   GET /api/v1/items/:id
