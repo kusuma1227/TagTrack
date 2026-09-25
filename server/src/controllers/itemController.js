@@ -20,7 +20,8 @@ const createItem = async (req, res, next) => {
     const tagId = await generateUniqueTagId();
 
     // 2. Generate QR Code Data URL embedding the public lookup URL
-    const qrCode = await generateQRCodeDataUrl(tagId);
+    const origin = req.headers.origin || req.headers.referer || null;
+    const qrCode = await generateQRCodeDataUrl(tagId, origin);
 
     // 3. Save Item in MongoDB
     const item = await Item.create({
