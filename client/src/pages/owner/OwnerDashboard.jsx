@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import useAuth from '../../hooks/useAuth';
-import { getMyItems } from '../../api/itemApi';
+import { getMyItems, markItemLost } from '../../api/itemApi';
 import { ITEM_CATEGORIES } from '../../config/constants';
 import QRModal from '../../components/items/QRModal';
 
@@ -23,6 +23,8 @@ const OwnerDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedItemForQR, setSelectedItemForQR] = useState(null);
+  const [itemToMarkLost, setItemToMarkLost] = useState(null);
+  const [isMarkingLost, setIsMarkingLost] = useState(false);
 
   const fetchItems = async () => {
     try {
@@ -33,6 +35,35 @@ const OwnerDashboard = () => {
       toast.error('Failed to load registered items');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleConfirmMarkLost = async () => {
+    if (!itemToMarkLost) return;
+    try {
+      setIsMarkingLost(true);
+      const res = await markItemLost(itemToMarkLost._id);
+      const updatedItem = res.data?.item;
+
+      // Update item status immediately in local state
+      setItems((prevItems) =>
+        prevItems.map((item) =>
+          item._id === itemToMarkLost._id
+            ? { ...item, status: updatedItem?.status || 'LOST' }
+            : item
+        )
+      );
+
+      toast.success(res.message || 'Item marked as lost successfully');
+      setItemToMarkLost(null);
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to mark item as lost';
+      toast.error(errorMsg);
+    } finally {
+      setIsMarkingLost(false);
     }
   };
 
@@ -349,6 +380,19 @@ const OwnerDashboard = () => {
                       </span>
                     </button>
                   </div>
+
+                  {/* Mark as Lost Action (Only for items whose status is REGISTERED) */}
+                  {item.status === 'REGISTERED' && (
+                    <div className="mt-4 pt-3 border-t border-[#F0EAF8]">
+                      <button
+                        onClick={() => setItemToMarkLost(item)}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold text-[#EC4899] bg-[#FFF0F7] hover:bg-[#FCE7F3] border border-[#FBCFE8] hover:border-[#F472B6] transition-all duration-200 shadow-soft-sm active:scale-[0.98]"
+                      >
+                        <span>⚠️</span>
+                        <span>Mark as Lost</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -397,6 +441,80 @@ const OwnerDashboard = () => {
         isOpen={Boolean(selectedItemForQR)}
         onClose={() => setSelectedItemForQR(null)}
       />
+
+      {/* Confirmation Modal for Marking Item as LOST */}
+      {itemToMarkLost && (
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => !isMarkingLost && setItemToMarkLost(null)}
+        >
+          <div
+            className="w-full max-w-md p-6 sm:p-7 rounded-[28px] bg-white border border-[#E9DFFF] shadow-soft-xl relative animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => !isMarkingLost && setItemToMarkLost(null)}
+              disabled={isMarkingLost}
+              className="absolute top-5 right-5 text-[#777080] hover:text-[#18151F] p-2 rounded-xl bg-[#F8F7FF] hover:bg-[#F3EEFF] transition-all duration-200 disabled:opacity-50"
+              aria-label="Close"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="text-center">
+              {/* Warning Icon Badge */}
+              <div className="w-14 h-14 rounded-2xl bg-[#FFF0F7] border border-[#FBCFE8] flex items-center justify-center mx-auto mb-4 text-2xl shadow-soft-sm">
+                ⚠️
+              </div>
+
+              <h3 className="text-xl font-extrabold text-[#18151F] mb-2">
+                Mark Item as Lost?
+              </h3>
+
+              <p className="text-sm text-[#5B5568] mb-4">
+                Are you sure you want to mark <span className="font-bold text-[#18151F]">{itemToMarkLost.itemName}</span> (<span className="font-mono font-bold text-[#8B5CF6]">{itemToMarkLost.tagId}</span>) as <span className="font-bold text-[#EC4899]">LOST</span>?
+              </p>
+
+              <div className="p-3 bg-[#FFF0F7] rounded-xl border border-[#FBCFE8] text-xs text-[#9D174D] mb-6 text-left leading-relaxed">
+                <span className="font-bold block mb-0.5">ℹ️ What happens next:</span>
+                The item status will be updated to LOST. Anyone who scans this item's QR code will be able to see that it is lost and can help you recover it.
+              </div>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setItemToMarkLost(null)}
+                  disabled={isMarkingLost}
+                  className="btn-secondary text-xs py-3"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmMarkLost}
+                  disabled={isMarkingLost}
+                  className="btn-danger text-xs py-3 flex items-center justify-center gap-2"
+                >
+                  {isMarkingLost ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Marking...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>⚠️ Confirm Lost</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

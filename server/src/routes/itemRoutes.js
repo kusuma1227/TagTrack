@@ -5,14 +5,33 @@ const auth = require('../middleware/auth');
 const authorize = require('../middleware/authorize');
 const validate = require('../middleware/validate');
 const { ROLES } = require('../config/constants');
-const { validateCreateItem } = require('../validators/itemValidators');
+const { validateCreateItem, validateReportFound } = require('../validators/itemValidators');
 const {
   createItem,
   getMyItems,
   getItemById,
+  markItemLost,
+  getItemByTagId,
+  reportItemFound,
 } = require('../controllers/itemController');
 
-// All item endpoints require authentication
+// ── Public Routes (No authentication required) ──────────────────────────────
+// @route   GET /api/v1/items/tag/:tagId
+// @desc    Get public item details by Tag ID
+// @access  Public
+router.get('/tag/:tagId', getItemByTagId);
+
+// @route   POST /api/v1/items/:tagId/found
+// @desc    Submit a found report for a lost item
+// @access  Public
+router.post(
+  '/:tagId/found',
+  validateReportFound,
+  validate,
+  reportItemFound
+);
+
+// ── Protected Routes (Require authentication) ───────────────────────────────
 router.use(auth);
 
 // @route   POST /api/v1/items
@@ -33,6 +52,15 @@ router.get(
   '/my-items',
   authorize(ROLES.OWNER, ROLES.ADMIN),
   getMyItems
+);
+
+// @route   PATCH /api/v1/items/:id/lost
+// @desc    Mark a registered item as lost
+// @access  Private (Owner of the item)
+router.patch(
+  '/:id/lost',
+  authorize(ROLES.OWNER),
+  markItemLost
 );
 
 // @route   GET /api/v1/items/:id

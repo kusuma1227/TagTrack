@@ -1,15 +1,132 @@
 const Item = require('../models/Item');
+const FoundReport = require('../models/FoundReport');
 const ApiError = require('../utils/ApiError');
 const { generateUniqueTagId, generateQRCodeDataUrl } = require('../utils/tagGenerator');
-const { ITEM_STATUS } = require('../config/constants');
+const { ITEM_STATUS, REPORT_STATUS } = require('../config/constants');
 
 /**
  * Item Controller
  * ───────────────
- * createItem   POST /api/v1/items
- * getMyItems   GET  /api/v1/items/my-items
- * getItemById  GET  /api/v1/items/:id
+ * getItemByTagId  GET   /api/v1/items/tag/:tagId (Public)
+ * reportItemFound POST  /api/v1/items/:tagId/found (Public)
+ * createItem      POST  /api/v1/items (Private)
+ * getMyItems      GET   /api/v1/items/my-items (Private)
+ * getItemById     GET   /api/v1/items/:id (Private)
+ * markItemLost    PATCH /api/v1/items/:id/lost (Private)
  */
+
+// ── Get Public Item Details by Tag ID (Public) ───────────────────────────────
+const getItemByTagId = async (req, res, next) => {
+  try {
+    const rawTagId = req.params.tagId;
+    if (!rawTagId) {
+      throw new ApiError(400, 'Tag ID is required', 'TAG_ID_REQUIRED');
+    }
+
+    const tagId = rawTagId.trim().toUpperCase();
+    if (!/^TT-[A-Z0-9]{6}$/.test(tagId)) {
+      throw new ApiError(400, 'Invalid Tag ID format. Must be in format TT-XXXXXX', 'INVALID_TAG_ID');
+    }
+
+    const item = await Item.findOne({ tagId });
+    if (!item) {
+      throw new ApiError(404, 'No item found with this Tag ID', 'ITEM_NOT_FOUND');
+    }
+
+    return res.json({
+      success: true,
+      message: 'Item details retrieved successfully',
+      data: {
+        item: item.toPublicJSON(),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Report Found for a LOST Item (Public) ────────────────────────────────────
+const reportItemFound = async (req, res, next) => {
+  try {
+    const rawTagId = req.params.tagId;
+    if (!rawTagId) {
+      throw new ApiError(400, 'Tag ID is required', 'TAG_ID_REQUIRED');
+    }
+
+    const tagId = rawTagId.trim().toUpperCase();
+    if (!/^TT-[A-Z0-9]{6}$/.test(tagId)) {
+      throw new ApiError(400, 'Invalid Tag ID format. Must be in format TT-XXXXXX', 'INVALID_TAG_ID');
+    }
+
+    const item = await Item.findOne({ tagId });
+    if (!item) {
+      throw new ApiError(404, 'No item found with this Tag ID', 'ITEM_NOT_FOUND');
+    }
+
+    // Check item status
+    if (item.status === ITEM_STATUS.REGISTERED) {
+      throw new ApiError(
+        400,
+        'This item is registered and has not been reported lost by its owner.',
+        'ITEM_NOT_LOST'
+      );
+    }
+
+    if (item.status === ITEM_STATUS.RETURNED) {
+      throw new ApiError(
+        400,
+        'This item has already been marked as returned.',
+        'ITEM_ALREADY_RETURNED'
+      );
+    }
+
+    if (item.status !== ITEM_STATUS.LOST) {
+      throw new ApiError(
+        400,
+        `Cannot report found for an item with status ${item.status}`,
+        'INVALID_STATUS'
+      );
+    }
+
+    const { finderName, finderPhone, finderEmail, finderMessage } = req.body;
+
+    // Prevent duplicate active report from the same finder phone
+    const existingReport = await FoundReport.findOne({
+      item: item._id,
+      finderPhone: finderPhone.trim(),
+      status: REPORT_STATUS.SUBMITTED,
+    });
+
+    if (existingReport) {
+      throw new ApiError(
+        400,
+        'A found report with this contact number has already been submitted for this item.',
+        'DUPLICATE_REPORT'
+      );
+    }
+
+    // Create the FoundReport in MongoDB (item status remains LOST)
+    const report = await FoundReport.create({
+      item: item._id,
+      finderName: finderName.trim(),
+      finderPhone: finderPhone.trim(),
+      finderEmail: finderEmail ? finderEmail.trim().toLowerCase() : null,
+      finderMessage: finderMessage ? finderMessage.trim() : '',
+      status: REPORT_STATUS.SUBMITTED,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Found report submitted successfully. Thank you for helping recover this item!',
+      data: {
+        report: report.toSafeJSON(),
+        item: item.toPublicJSON(),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // ── Register a New Item ──────────────────────────────────────────────────────
 const createItem = async (req, res, next) => {
@@ -125,8 +242,59 @@ const getItemById = async (req, res, next) => {
   }
 };
 
+// ── Mark Item as LOST ────────────────────────────────────────────────────────
+const markItemLost = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const item = await Item.findById(id);
+    if (!item) {
+      throw new ApiError(404, 'Item not found', 'ITEM_NOT_FOUND');
+    }
+
+    // Access control: only the authenticated owner can mark their item as lost
+    if (item.owner.toString() !== req.user._id.toString()) {
+      throw new ApiError(403, 'Access denied. You do not own this item.', 'FORBIDDEN');
+    }
+
+    // Specific status transition checks
+    if (item.status === ITEM_STATUS.LOST) {
+      throw new ApiError(400, 'Item is already marked as lost', 'ITEM_ALREADY_LOST');
+    }
+
+    if (item.status === ITEM_STATUS.RETURNED) {
+      throw new ApiError(400, 'Returned items cannot be marked as lost', 'INVALID_STATUS_TRANSITION');
+    }
+
+    if (item.status !== ITEM_STATUS.REGISTERED) {
+      throw new ApiError(
+        400,
+        `Cannot mark item as lost. Current status is ${item.status}`,
+        'INVALID_STATUS_TRANSITION'
+      );
+    }
+
+    // Update status to LOST
+    item.status = ITEM_STATUS.LOST;
+    await item.save();
+
+    return res.json({
+      success: true,
+      message: 'Item marked as lost successfully',
+      data: {
+        item,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
+  getItemByTagId,
+  reportItemFound,
   createItem,
   getMyItems,
   getItemById,
+  markItemLost,
 };
