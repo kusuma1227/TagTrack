@@ -35,6 +35,28 @@ const claimSchema = new mongoose.Schema(
       },
       default: CLAIM_STATUS.SUBMITTED,
     },
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
+    reviewedAt: {
+      type: Date,
+      default: null,
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      maxlength: [1000, 'Rejection reason cannot exceed 1000 characters'],
+      default: '',
+    },
+    verificationNotes: {
+      type: String,
+      trim: true,
+      maxlength: [1000, 'Verification notes cannot exceed 1000 characters'],
+      default: '',
+    },
   },
   {
     timestamps: true,
@@ -44,6 +66,7 @@ const claimSchema = new mongoose.Schema(
 // ── Indexes ──────────────────────────────────────────────────────────────────
 claimSchema.index({ item: 1, owner: 1, status: 1 });
 claimSchema.index({ owner: 1, createdAt: -1 });
+claimSchema.index({ status: 1, createdAt: -1 });
 
 // ── Safe JSON Representation ────────────────────────────────────────────────
 claimSchema.methods.toSafeJSON = function () {
@@ -54,6 +77,10 @@ claimSchema.methods.toSafeJSON = function () {
     foundReport: this.foundReport,
     claimMessage: this.claimMessage,
     status: this.status,
+    reviewedBy: this.reviewedBy,
+    reviewedAt: this.reviewedAt,
+    rejectionReason: this.rejectionReason,
+    verificationNotes: this.verificationNotes,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };

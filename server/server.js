@@ -11,6 +11,7 @@ const errorHandler = require('./src/middleware/errorHandler');
 // Route imports
 const authRoutes = require('./src/routes/authRoutes');
 const itemRoutes = require('./src/routes/itemRoutes');
+const claimRoutes = require('./src/routes/claimRoutes');
 
 // Connect to database
 connectDB();
@@ -118,6 +119,7 @@ app.get('/api/health', (req, res) => {
 // Apply auth rate limiter to auth routes
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/items', itemRoutes);
+app.use('/api/v1/claims', claimRoutes);
 
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
@@ -131,10 +133,12 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ── Start Server ─────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`\n🚀 TagTrack Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-  console.log(`   Health check: http://localhost:${PORT}/api/health\n`);
-});
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`\n🚀 TagTrack Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+    console.log(`   Health check: http://localhost:${PORT}/api/health\n`);
+  });
+}
 
 module.exports = app;
