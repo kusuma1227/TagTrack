@@ -58,7 +58,25 @@ const validateReportFound = [
     .withMessage('Message cannot exceed 1000 characters'),
 ];
 
+/**
+ * Validation rules for submitting an ownership claim
+ */
+const validateSubmitClaim = [
+  body('claimMessage')
+    .optional({ checkFalsy: true })
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage('Claim message cannot exceed 1000 characters'),
+
+  body('foundReportId')
+    .optional({ checkFalsy: true })
+    .trim()
+    .isMongoId()
+    .withMessage('Invalid Found Report ID format'),
+];
+
 module.exports = {
   validateCreateItem,
   validateReportFound,
+  validateSubmitClaim,
 };

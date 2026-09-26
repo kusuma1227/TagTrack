@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import useAuth from '../../hooks/useAuth';
-import { getMyItems, markItemLost, getMyFoundReports } from '../../api/itemApi';
+import { getMyItems, markItemLost, getMyFoundReports, getMyClaims, submitOwnershipClaim } from '../../api/itemApi';
 import { ITEM_CATEGORIES } from '../../config/constants';
 import QRModal from '../../components/items/QRModal';
 
@@ -15,6 +15,7 @@ import QRModal from '../../components/items/QRModal';
  * - Real-time search & Category filters
  * - QR preview triggers & copyable Tag IDs
  * - Found Reports recovery leads viewer
+ * - Ownership Claim Submission Flow
  */
 const OwnerDashboard = () => {
   const { user } = useAuth();
@@ -31,6 +32,13 @@ const OwnerDashboard = () => {
   const [foundReports, setFoundReports] = useState([]);
   const [isLoadingReports, setIsLoadingReports] = useState(true);
   const [reportsError, setReportsError] = useState('');
+
+  // Ownership Claims state
+  const [claims, setClaims] = useState([]);
+  const [isLoadingClaims, setIsLoadingClaims] = useState(false);
+  const [claimModalReport, setClaimModalReport] = useState(null);
+  const [claimMessage, setClaimMessage] = useState('');
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
 
   const fetchItems = async () => {
     try {
@@ -54,6 +62,18 @@ const OwnerDashboard = () => {
       setReportsError('Failed to load found reports');
     } finally {
       setIsLoadingReports(false);
+    }
+  };
+
+  const fetchClaims = async () => {
+    try {
+      setIsLoadingClaims(true);
+      const res = await getMyClaims();
+      setClaims(res.data?.claims || []);
+    } catch (error) {
+      console.error('Failed to load claims', error);
+    } finally {
+      setIsLoadingClaims(false);
     }
   };
 
@@ -89,7 +109,57 @@ const OwnerDashboard = () => {
   useEffect(() => {
     fetchItems();
     fetchFoundReports();
+    fetchClaims();
   }, []);
+
+  const getClaimForReport = (report) => {
+    if (!report) return null;
+    return claims.find(
+      (c) =>
+        (c.foundReport?._id && report._id && c.foundReport._id.toString() === report._id.toString()) ||
+        (c.foundReport && report._id && c.foundReport.toString() === report._id.toString()) ||
+        (c.item?._id && report.item?._id && c.item._id.toString() === report.item._id.toString()) ||
+        (c.item && report.item?._id && c.item.toString() === report.item._id.toString()) ||
+        (c.item?.tagId && report.item?.tagId && c.item.tagId === report.item.tagId)
+    );
+  };
+
+  const handleOpenClaimModal = (report) => {
+    setClaimModalReport(report);
+    setClaimMessage('');
+  };
+
+  const handleSubmitClaim = async (e) => {
+    e.preventDefault();
+    if (!claimModalReport || !claimModalReport.item?.tagId) return;
+
+    try {
+      setIsSubmittingClaim(true);
+      const payload = {
+        foundReportId: claimModalReport._id,
+        claimMessage: claimMessage.trim(),
+      };
+      const res = await submitOwnershipClaim(claimModalReport.item.tagId, payload);
+      toast.success(res.message || 'Ownership claim submitted successfully');
+
+      if (res.data?.claim) {
+        setClaims((prev) => [res.data.claim, ...prev.filter((c) => c._id !== res.data.claim._id)]);
+      }
+
+      setClaimModalReport(null);
+      setClaimMessage('');
+      fetchClaims();
+      fetchFoundReports();
+    } catch (error) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to submit ownership claim';
+      toast.error(errorMsg);
+    } finally {
+      setIsSubmittingClaim(false);
+    }
+  };
 
   // Filter items client-side for smooth real-time searching
   const filteredItems = items.filter((item) => {
@@ -290,130 +360,168 @@ const OwnerDashboard = () => {
           ) : (
             /* Reports Grid */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {foundReports.map((report, idx) => (
-                <div
-                  key={report._id}
-                  className="rounded-[22px] p-6 bg-white border border-[#E9DFFF] hover:border-[#8B5CF6]/50 shadow-soft-sm hover:shadow-soft-md transition-all duration-300 flex flex-col justify-between hover:-translate-y-1 animate-slide-up relative overflow-hidden"
-                  style={{ animationDelay: `${Math.min((idx + 1) * 60, 400)}ms` }}
-                >
-                  {/* Subtle Top Accent Line */}
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F97316]" />
+              {foundReports.map((report, idx) => {
+                const activeClaim = getClaimForReport(report);
+                return (
+                  <div
+                    key={report._id}
+                    className="rounded-[22px] p-6 bg-white border border-[#E9DFFF] hover:border-[#8B5CF6]/50 shadow-soft-sm hover:shadow-soft-md transition-all duration-300 flex flex-col justify-between hover:-translate-y-1 animate-slide-up relative overflow-hidden"
+                    style={{ animationDelay: `${Math.min((idx + 1) * 60, 400)}ms` }}
+                  >
+                    {/* Subtle Top Accent Line */}
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#8B5CF6] via-[#EC4899] to-[#F97316]" />
 
-                  <div className="space-y-4">
-                    {/* Header: Item Name, Category & Visual LOST Indicator */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[11px] font-bold bg-[#FFF0F7] text-[#EC4899] border border-[#FBCFE8] px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
-                            <span>⚠️</span>
-                            <span>LOST Item</span>
-                          </span>
-                          {report.item?.category && (
-                            <span className="text-[11px] font-bold bg-[#F8F7FF] text-[#8B5CF6] border border-[#DDD3F5] px-2 py-0.5 rounded-full">
-                              {report.item.category}
+                    <div className="space-y-4">
+                      {/* Header: Item Name, Category & Visual LOST Indicator */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[11px] font-bold bg-[#FFF0F7] text-[#EC4899] border border-[#FBCFE8] px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                              <span>⚠️</span>
+                              <span>LOST Item</span>
                             </span>
-                          )}
+                            {report.item?.category && (
+                              <span className="text-[11px] font-bold bg-[#F8F7FF] text-[#8B5CF6] border border-[#DDD3F5] px-2 py-0.5 rounded-full">
+                                {report.item.category}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="font-extrabold text-[#18151F] text-lg">
+                            {report.item?.itemName || 'Item'}
+                          </h3>
                         </div>
-                        <h3 className="font-extrabold text-[#18151F] text-lg">
-                          {report.item?.itemName || 'Item'}
-                        </h3>
+
+                        {/* Report Status Badge */}
+                        <div className="text-right">
+                          <span className="badge bg-[#ECFDF5] text-[#10B981] border-[#A7F3D0] uppercase font-bold text-[10px]">
+                            {report.status || 'SUBMITTED'}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Report Status Badge */}
-                      <div className="text-right">
-                        <span className="badge bg-[#ECFDF5] text-[#10B981] border-[#A7F3D0] uppercase font-bold text-[10px]">
-                          {report.status || 'SUBMITTED'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Tag ID Display */}
-                    <div className="p-3 bg-[#F8F7FF] rounded-xl border border-[#DDD3F5] flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-[#777080] block tracking-wider">
-                          Target Tag ID
-                        </span>
-                        <span className="font-mono text-sm font-extrabold text-[#8B5CF6] tracking-wider">
-                          {report.item?.tagId || 'N/A'}
-                        </span>
-                      </div>
-                      {report.item?.tagId && (
-                        <button
-                          onClick={(e) => handleCopyTagId(report.item.tagId, e)}
-                          className="btn-secondary text-[11px] py-1 px-2.5"
-                          title="Copy Tag ID"
-                        >
-                          📋 Copy Tag
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Finder Contact Information Box */}
-                    <div className="p-4 bg-[#FFF8FA] rounded-xl border border-[#FCE7F3] space-y-2.5">
-                      <div className="flex items-center justify-between border-b border-[#FBCFE8] pb-2">
-                        <span className="text-xs font-bold text-[#9D174D] flex items-center gap-1.5">
-                          <span>👤</span>
-                          <span>Finder Details</span>
-                        </span>
-                        <span className="text-xs font-bold text-[#18151F]">
-                          {report.finderName}
-                        </span>
+                      {/* Tag ID Display */}
+                      <div className="p-3 bg-[#F8F7FF] rounded-xl border border-[#DDD3F5] flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-[#777080] block tracking-wider">
+                            Target Tag ID
+                          </span>
+                          <span className="font-mono text-sm font-extrabold text-[#8B5CF6] tracking-wider">
+                            {report.item?.tagId || 'N/A'}
+                          </span>
+                        </div>
+                        {report.item?.tagId && (
+                          <button
+                            onClick={(e) => handleCopyTagId(report.item.tagId, e)}
+                            className="btn-secondary text-[11px] py-1 px-2.5"
+                            title="Copy Tag ID"
+                          >
+                            📋 Copy Tag
+                          </button>
+                        )}
                       </div>
 
-                      {/* Phone */}
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#777080] font-medium flex items-center gap-1">
-                          <span>📞</span> Phone:
-                        </span>
-                        <a
-                          href={`tel:${report.finderPhone}`}
-                          className="font-bold text-[#8B5CF6] hover:underline font-mono"
-                        >
-                          {report.finderPhone}
-                        </a>
-                      </div>
+                      {/* Finder Contact Information Box */}
+                      <div className="p-4 bg-[#FFF8FA] rounded-xl border border-[#FCE7F3] space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-[#FBCFE8] pb-2">
+                          <span className="text-xs font-bold text-[#9D174D] flex items-center gap-1.5">
+                            <span>👤</span>
+                            <span>Finder Details</span>
+                          </span>
+                          <span className="text-xs font-bold text-[#18151F]">
+                            {report.finderName}
+                          </span>
+                        </div>
 
-                      {/* Email (if available) */}
-                      {report.finderEmail && (
+                        {/* Phone */}
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-[#777080] font-medium flex items-center gap-1">
-                            <span>✉️</span> Email:
+                            <span>📞</span> Phone:
                           </span>
                           <a
-                            href={`mailto:${report.finderEmail}`}
-                            className="font-bold text-[#8B5CF6] hover:underline truncate max-w-[200px]"
+                            href={`tel:${report.finderPhone}`}
+                            className="font-bold text-[#8B5CF6] hover:underline font-mono"
                           >
-                            {report.finderEmail}
+                            {report.finderPhone}
                           </a>
                         </div>
-                      )}
 
-                      {/* Message / Location */}
-                      {report.finderMessage && (
-                        <div className="pt-2 border-t border-[#FBCFE8] text-xs">
-                          <span className="text-[#777080] font-medium block mb-1">
-                            💬 Finder Message / Location:
-                          </span>
-                          <p className="bg-white p-2.5 rounded-lg border border-[#FBCFE8] text-[#18151F] leading-relaxed italic font-normal">
-                            "{report.finderMessage}"
-                          </p>
-                        </div>
-                      )}
+                        {/* Email (if available) */}
+                        {report.finderEmail && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-[#777080] font-medium flex items-center gap-1">
+                              <span>✉️</span> Email:
+                            </span>
+                            <a
+                              href={`mailto:${report.finderEmail}`}
+                              className="font-bold text-[#8B5CF6] hover:underline truncate max-w-[200px]"
+                            >
+                              {report.finderEmail}
+                            </a>
+                          </div>
+                        )}
+
+                        {/* Message / Location */}
+                        {report.finderMessage && (
+                          <div className="pt-2 border-t border-[#FBCFE8] text-xs">
+                            <span className="text-[#777080] font-medium block mb-1">
+                              💬 Finder Message / Location:
+                            </span>
+                            <p className="bg-white p-2.5 rounded-lg border border-[#FBCFE8] text-[#18151F] leading-relaxed italic font-normal">
+                              "{report.finderMessage}"
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Ownership Claim Status / Action */}
+                      <div className="pt-1">
+                        {activeClaim ? (
+                          <div className="p-3.5 bg-[#F0FDF4] rounded-xl border border-[#BBF7D0] space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-[#15803D] flex items-center gap-1.5">
+                                <span>✨</span>
+                                <span>Claim Submitted</span>
+                              </span>
+                              <span className="badge bg-[#DCFCE7] text-[#16A34A] border-[#86EFAC] font-mono text-[10px] font-extrabold uppercase">
+                                {activeClaim.status || 'SUBMITTED'}
+                              </span>
+                            </div>
+                            {activeClaim.claimMessage && (
+                              <p className="text-xs text-[#166534] bg-white/80 p-2.5 rounded-lg border border-[#BBF7D0] font-normal leading-relaxed italic">
+                                "{activeClaim.claimMessage}"
+                              </p>
+                            )}
+                            <div className="text-[10px] text-[#15803D]/80 flex items-center justify-between pt-0.5">
+                              <span>Claimed by You</span>
+                              <span>{activeClaim.createdAt ? format(new Date(activeClaim.createdAt), 'MMM d, yyyy') : ''}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenClaimModal(report)}
+                            className="w-full btn-primary text-xs py-2.5 px-4 flex items-center justify-center gap-2 shadow-[0_2px_10px_rgba(139,92,246,0.25)]"
+                          >
+                            <span>🛡️</span>
+                            <span>Submit Ownership Claim</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Footer: Date Submitted */}
+                    <div className="pt-3 mt-4 border-t border-[#E9DFFF] flex items-center justify-between text-[11px] text-[#777080]">
+                      <span className="flex items-center gap-1">
+                        <span>🕒</span>
+                        <span>Reported {format(new Date(report.createdAt), 'MMM d, yyyy h:mm a')}</span>
+                      </span>
+                      <span className="font-semibold text-[#8B5CF6]">
+                        Verified Lead
+                      </span>
                     </div>
                   </div>
-
-                  {/* Footer: Date Submitted */}
-                  <div className="pt-3 mt-4 border-t border-[#E9DFFF] flex items-center justify-between text-[11px] text-[#777080]">
-                    <span className="flex items-center gap-1">
-                      <span>🕒</span>
-                      <span>Reported {format(new Date(report.createdAt), 'MMM d, yyyy h:mm a')}</span>
-                    </span>
-                    <span className="font-semibold text-[#8B5CF6]">
-                      Verified Lead
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -720,6 +828,123 @@ const OwnerDashboard = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ownership Claim Modal */}
+      {claimModalReport && (
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => !isSubmittingClaim && setClaimModalReport(null)}
+        >
+          <div
+            className="w-full max-w-lg p-6 sm:p-7 rounded-[28px] bg-white border border-[#E9DFFF] shadow-soft-xl relative animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => !isSubmittingClaim && setClaimModalReport(null)}
+              disabled={isSubmittingClaim}
+              className="absolute top-5 right-5 text-[#777080] hover:text-[#18151F] p-2 rounded-xl bg-[#F8F7FF] hover:bg-[#F3EEFF] transition-all duration-200 disabled:opacity-50"
+              aria-label="Close"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-[#F3EEFF] border border-[#DDD3F5] flex items-center justify-center text-2xl shadow-soft-sm">
+                  🛡️
+                </div>
+                <div>
+                  <h3 className="text-xl font-extrabold text-[#18151F]">
+                    Submit Ownership Claim
+                  </h3>
+                  <p className="text-xs text-[#5B5568]">
+                    Verify and submit an ownership claim for your found item
+                  </p>
+                </div>
+              </div>
+
+              {/* Item & Finder Info Card */}
+              <div className="p-4 bg-[#F8F7FF] rounded-2xl border border-[#DDD3F5] space-y-2 mb-4 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#777080] font-medium">Item Name:</span>
+                  <span className="font-bold text-[#18151F]">{claimModalReport.item?.itemName || 'Item'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#777080] font-medium">Tag ID:</span>
+                  <span className="font-mono font-bold text-[#8B5CF6]">{claimModalReport.item?.tagId}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#777080] font-medium">Reported by Finder:</span>
+                  <span className="font-semibold text-[#18151F]">{claimModalReport.finderName}</span>
+                </div>
+                {claimModalReport.finderPhone && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#777080] font-medium">Finder Phone:</span>
+                    <span className="font-mono text-[#5B5568]">{claimModalReport.finderPhone}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Claim Form */}
+              <form onSubmit={handleSubmitClaim} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#18151F] mb-1.5 uppercase tracking-wider">
+                    Claim Message / Proof Notes <span className="text-[#777080] font-normal lowercase">(optional)</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={claimMessage}
+                    onChange={(e) => setClaimMessage(e.target.value)}
+                    placeholder="Add details confirming your ownership (e.g. distinguishing marks, serial number, lock code, purchase details, or handover instructions)..."
+                    maxLength={1000}
+                    className="input text-xs w-full resize-none p-3"
+                    disabled={isSubmittingClaim}
+                  />
+                  <div className="flex justify-end mt-1 text-[11px] text-[#777080]">
+                    <span>{claimMessage.length} / 1000</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-[#FFF8FA] rounded-xl border border-[#FCE7F3] text-xs text-[#9D174D] leading-relaxed">
+                  <span className="font-bold block mb-0.5">ℹ️ What happens next:</span>
+                  Your claim will be recorded with status <span className="font-mono font-bold">SUBMITTED</span> and associated with this found report lead.
+                </div>
+
+                {/* Actions */}
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setClaimModalReport(null)}
+                    disabled={isSubmittingClaim}
+                    className="btn-secondary text-xs py-3"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingClaim}
+                    className="btn-primary text-xs py-3 flex items-center justify-center gap-2"
+                  >
+                    {isSubmittingClaim ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Submitting Claim...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🛡️ Submit Claim</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

@@ -5,7 +5,7 @@ const auth = require('../middleware/auth');
 const authorize = require('../middleware/authorize');
 const validate = require('../middleware/validate');
 const { ROLES } = require('../config/constants');
-const { validateCreateItem, validateReportFound } = require('../validators/itemValidators');
+const { validateCreateItem, validateReportFound, validateSubmitClaim } = require('../validators/itemValidators');
 const {
   createItem,
   getMyItems,
@@ -14,6 +14,8 @@ const {
   getItemByTagId,
   reportItemFound,
   getMyFoundReports,
+  submitOwnershipClaim,
+  getMyClaims,
 } = require('../controllers/itemController');
 
 // ── Public Routes (No authentication required) ──────────────────────────────
@@ -71,6 +73,26 @@ router.get(
   '/found-reports',
   authorize(ROLES.OWNER, ROLES.ADMIN),
   getMyFoundReports
+);
+
+// @route   GET /api/v1/items/my-claims
+// @desc    Get all ownership claims submitted by the authenticated owner
+// @access  Private (Owner, Admin)
+router.get(
+  '/my-claims',
+  authorize(ROLES.OWNER, ROLES.ADMIN),
+  getMyClaims
+);
+
+// @route   POST /api/v1/items/:tagId/claims
+// @desc    Submit an ownership claim for an item with a found report
+// @access  Private (Owner, Admin)
+router.post(
+  '/:tagId/claims',
+  authorize(ROLES.OWNER, ROLES.ADMIN),
+  validateSubmitClaim,
+  validate,
+  submitOwnershipClaim
 );
 
 // @route   GET /api/v1/items/:id

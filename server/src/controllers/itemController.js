@@ -1,18 +1,22 @@
 const Item = require('../models/Item');
 const FoundReport = require('../models/FoundReport');
+const Claim = require('../models/Claim');
 const ApiError = require('../utils/ApiError');
 const { generateUniqueTagId, generateQRCodeDataUrl } = require('../utils/tagGenerator');
-const { ITEM_STATUS, REPORT_STATUS } = require('../config/constants');
+const { ITEM_STATUS, REPORT_STATUS, CLAIM_STATUS } = require('../config/constants');
 
 /**
  * Item Controller
  * ───────────────
- * getItemByTagId  GET   /api/v1/items/tag/:tagId (Public)
- * reportItemFound POST  /api/v1/items/:tagId/found (Public)
- * createItem      POST  /api/v1/items (Private)
- * getMyItems      GET   /api/v1/items/my-items (Private)
- * getItemById     GET   /api/v1/items/:id (Private)
- * markItemLost    PATCH /api/v1/items/:id/lost (Private)
+ * getItemByTagId      GET   /api/v1/items/tag/:tagId (Public)
+ * reportItemFound     POST  /api/v1/items/:tagId/found (Public)
+ * createItem          POST  /api/v1/items (Private)
+ * getMyItems          GET   /api/v1/items/my-items (Private)
+ * getItemById         GET   /api/v1/items/:id (Private)
+ * markItemLost        PATCH /api/v1/items/:id/lost (Private)
+ * getMyFoundReports   GET   /api/v1/items/found-reports (Private)
+ * submitOwnershipClaim POST /api/v1/items/:tagId/claims (Private)
+ * getMyClaims         GET   /api/v1/items/my-claims (Private)
  */
 
 // ── Get Public Item Details by Tag ID (Public) ───────────────────────────────
@@ -326,6 +330,108 @@ const getMyFoundReports = async (req, res, next) => {
   }
 };
 
+// ── Submit Ownership Claim (Private - Owner) ─────────────────────────────────
+const submitOwnershipClaim = async (req, res, next) => {
+  try {
+    const rawTagId = req.params.tagId;
+    if (!rawTagId) {
+      throw new ApiError(400, 'Tag ID is required', 'TAG_ID_REQUIRED');
+    }
+
+    const tagId = rawTagId.trim().toUpperCase();
+    if (!/^TT-[A-Z0-9]{6}$/.test(tagId)) {
+      throw new ApiError(400, 'Invalid Tag ID format. Must be in format TT-XXXXXX', 'INVALID_TAG_ID');
+    }
+
+    // 1. Verify that the item exists
+    const item = await Item.findOne({ tagId });
+    if (!item) {
+      throw new ApiError(404, 'No item found with this Tag ID', 'ITEM_NOT_FOUND');
+    }
+
+    // 2. Ensure only the legitimate owner can create a claim
+    if (item.owner.toString() !== req.user._id.toString()) {
+      throw new ApiError(403, 'Access denied. You do not own this item.', 'FORBIDDEN');
+    }
+
+    // 3. Find relevant Found Report for this item
+    const { foundReportId, claimMessage } = req.body;
+    let foundReport = null;
+
+    if (foundReportId) {
+      foundReport = await FoundReport.findOne({ _id: foundReportId, item: item._id });
+      if (!foundReport) {
+        throw new ApiError(404, 'Found report not found for this item', 'FOUND_REPORT_NOT_FOUND');
+      }
+    } else {
+      // Find the most recent found report for this item
+      foundReport = await FoundReport.findOne({ item: item._id }).sort({ createdAt: -1 });
+      if (!foundReport) {
+        throw new ApiError(400, 'Cannot submit claim. No found report exists for this item.', 'NO_FOUND_REPORT');
+      }
+    }
+
+    // 4. Prevent duplicate active claims for the same item by the same owner
+    const existingActiveClaim = await Claim.findOne({
+      item: item._id,
+      owner: req.user._id,
+      status: { $in: [CLAIM_STATUS.SUBMITTED, CLAIM_STATUS.PENDING, CLAIM_STATUS.UNDER_REVIEW, CLAIM_STATUS.APPROVED] },
+    });
+
+    if (existingActiveClaim) {
+      throw new ApiError(
+        400,
+        'An active ownership claim has already been submitted for this item.',
+        'DUPLICATE_CLAIM'
+      );
+    }
+
+    // 5. Create Claim in MongoDB
+    const claim = await Claim.create({
+      owner: req.user._id,
+      item: item._id,
+      foundReport: foundReport._id,
+      claimMessage: claimMessage ? claimMessage.trim() : '',
+      status: CLAIM_STATUS.SUBMITTED,
+    });
+
+    const populatedClaim = await Claim.findById(claim._id)
+      .populate('item', 'itemName tagId status category description')
+      .populate('foundReport', 'finderName finderPhone finderEmail finderMessage createdAt');
+
+    return res.status(201).json({
+      success: true,
+      message: 'Ownership claim submitted successfully',
+      data: {
+        claim: populatedClaim,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── Get Logged-in Owner's Claims (Private) ───────────────────────────────────
+const getMyClaims = async (req, res, next) => {
+  try {
+    const claims = await Claim.find({ owner: req.user._id })
+      .populate('item', 'itemName tagId status category description')
+      .populate('foundReport', 'finderName finderPhone finderEmail finderMessage createdAt')
+      .sort({ createdAt: -1 });
+
+    return res.json({
+      success: true,
+      message: 'Claims retrieved successfully',
+      data: {
+        claims,
+        count: claims.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getItemByTagId,
   reportItemFound,
@@ -334,4 +440,6 @@ module.exports = {
   getItemById,
   markItemLost,
   getMyFoundReports,
+  submitOwnershipClaim,
+  getMyClaims,
 };

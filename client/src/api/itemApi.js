@@ -45,3 +45,16 @@ export const getMyFoundReports = async () => {
   const response = await axiosInstance.get('/items/found-reports');
   return response.data;
 };
+
+// Submit an ownership claim for an item with a found report (JWT required)
+export const submitOwnershipClaim = async (tagId, claimData) => {
+  const response = await axiosInstance.post(`/items/${tagId}/claims`, claimData);
+  return response.data;
+};
+
+// Get all ownership claims submitted by authenticated owner (JWT required)
+export const getMyClaims = async () => {
+  const response = await axiosInstance.get('/items/my-claims');
+  return response.data;
+};
+
